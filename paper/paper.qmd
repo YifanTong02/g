@@ -1,0 +1,533 @@
+---
+title: "Analyzing Determinants of Health Expenditure in UK Households: A Multivariate Regression Approach"
+author: 
+  - yifan tong
+thanks: "Code and data are available at: LINK."
+date: today
+date-format: long
+abstract: "This study explores the factors influencing health expenditure in UK households, a critical issue within the contexts of public health and economic policy. Utilizing data from the Living Costs and Food Survey UK Data Archive, this research employs multiple linear regression models to analyze the impact of demographic, economic, income, housing, occupational, and geographic variables on health expenditure. The analysis reveals a significant positive association between household size and health expenditure, suggesting that larger households face higher health costs. Additionally, the age of the oldest household member and household income significantly predict health expenses, emphasizing the effects of age-related health needs and economic status on healthcare access and affordability. The study also considers the number of rooms in accommodation and occupational class as predictors, reflecting broader socio-economic impacts on health expenditure. Despite a low R-squared value in the models, indicating that other unmeasured factors might also influence health costs, the findings provide valuable insights for policymakers and healthcare providers aiming to enhance healthcare resource management. Future research could further refine these models by considering non-linear relationships and more complex interactions between the variables"
+format: pdf
+number-sections: true
+bibliography: references.bib
+toc: true
+---
+
+```{r echo=FALSE, results='asis'}
+options(knitr.kable.NA = '')
+```
+
+```{r}
+#| include: false
+#| warning: false
+#| message: false
+
+library(broom)
+library(tidyverse)
+library(modelsummary)
+library(gridExtra)
+library(corrplot)
+library(car)
+library(lmtest)
+library(knitr)
+library(kableExtra)
+
+df <- read.csv("../data/raw_data/data.csv")
+```
+
+# Introduction
+
+
+The escalating costs of healthcare are a significant concern globally, influencing both public health outcomes and economic stability. In the UK, the intricacies of healthcare expenditure, driven by diverse demographic, economic, and social factors, present a compelling case for detailed analysis. The total healthcare expenditure in the UK reached £280.7 billion in 2021, accounting for 12.4% of the GDP, with a notable impact from the government's pandemic response leading to increased spending in areas like preventive care and pharmaceuticals.
+
+This study addresses the critical question: "What are the factors influencing health expenditure in UK households?" Despite extensive research in the field, gaps remain in understanding the specific contributions of factors like household size, income, and age, particularly in the context of recent economic fluctuations and health crises. By employing a multivariate regression approach using data from the Living Costs and Food Survey, this research dissects the influence of these variables on healthcare spending.
+
+The findings reveal a significant correlation between household size and health expenditure, with larger households incurring higher costs. Moreover, the age of the oldest household member and overall household income emerged as crucial predictors of expenditure, underscoring the influence of age-related health needs and financial capacity on spending. These insights are pivotal for policymakers and healthcare providers, who require a nuanced understanding of spending drivers to allocate resources effectively.
+
+The paper is structured as follows: Section 2 describes the data source, Section 3 presents the regression models and results, Section 4 discusses the implications of these findings, and recommendations for future research and policy formulation. By integrating detailed statistical analysis with comprehensive data, this study provides a robust foundation for targeted healthcare funding strategies, aiming to enhance the efficiency of resource management in the UK's public health system.
+
+
+# Data {#sec-data}
+
+## Data Management
+
+This research was conducted using the R statistical programming environment [@citeR]. Data management and analysis were primarily facilitated by the `tidyverse` package [@R-tidyverse], with additional support from `broom` [@R-broom] for converting statistical outputs into tidy formats. Tables were styled and managed using `knitr` [@R-knitr] and `kableExtra` [@R-kableExtra], while visualizations were created with `ggplot2` [@R-ggplot2]. The `corrplot` [@R-corrplot] package was utilized for correlation matrices, and regression diagnostics employed the `car` [@R-car] and `lmtest` [@R-lmtest] packages.
+
+
+## Source
+
+The data for this study was sourced from the Living Costs and Food Survey hosted by the UK Data Service [@UKDS-LCFS]. This survey provides comprehensive insights into household expenditures, including detailed information on food, living costs, and various demographic and economic factors. It is a valuable resource for analyzing household behavior and economic conditions across the UK.
+
+## Summary Statistics
+
+Because there are as many as 1913 variables in the original data, I only choose some of the variables that are relevant to the research problem. The final data has 5133 samples and 10 variables. Each row in the dataset represents a unique household and its corresponding values for these variables.
+
+1.  P606t: Total Health expenditure for children and adults. This is a numeric value.
+2.  A049: Household size, represented numerically.
+3.  A071: Sex of the oldest person in the household. This is a nominal value with three categories:
+    -   1 for all male,
+    -   2 for all female,
+    -   3 for mixed sex.
+4.  p344p: Gross normal weekly household income, top-coded. This is a numeric value.
+5.  incanon: Anonymised household income and allowances, a numeric value.
+6.  p493p: Indicates whether the household is wealthy or not, based on anonymised data. This is a nominal value with two categories:
+    -   0 for Not wealthy,
+    -   1 for Wealthy.
+7.  a070p: Age of the oldest person in the household, anonymised and numeric.
+8.  a114p: Number of rooms in accommodation, anonymised and numeric.
+9.  A094: NS - SEC 8 Class of household reference person. This is a nominal value with various categories representing different occupational classes.
+10. Gorx: Government Office Region modified. This is a nominal value with categories representing different regions.
+
+
+```{r}
+#| eval: true
+#| echo: false
+#| warning: false
+
+df$A071 <- factor(df$A071)
+df$p493p <- factor(df$p493p)
+df$A094 <- factor(df$A094)
+df$Gorx <- factor(df$Gorx)
+
+```
+
+Here are summary tables (@tbl-summary-num, @tbl-summary-cat) displaying the statistics of numeric variables and categorical variables from dataset. 
+
+| Variable | Count  | Mean   | Std    | Min  | 25%    | 50%    | 75%    | Max     |
+|----------|--------|--------|--------|------|--------|--------|--------|---------|
+| P606t    | 5133   | 7.41   | 39.00  | 0.00 | 0.00   | 0.28   | 3.81   | 1505.68 |
+| A049     | 5133   | 2.36   | 1.24   | 1.00 | 1.00   | 2.00   | 3.00   | 9.00    |
+| p344p    | 5133   | 723.07 | 510.63 | 0.00 | 335.65 | 588.22 | 981.35 | 2134.09 |
+| incanon  | 5133   | 739.03 | 498.28 | 0.00 | 368.86 | 596.54 | 983.52 | 2144.51 |
+| a070p    | 5133   | 54.96  | 16.12  | 17.00| 42.00  | 55.00  | 68.00  | 80.00   |
+| a114p    | 5133   | 5.72   | 1.72   | 1.00 | 5.00   | 6.00   | 7.00   | 10.00   |
+
+: Summary statistics of numerical variables {#tbl-summary-num}
+
+
+These tables provides a clear overview of the data distribution for each variable, helping in understanding the dataset's characteristics and informing potential analyses.
+
+|A071   |p493p  |     A094    |     Gorx    |
+|------|------|------|------|
+|1:2790 |0:5121 |12     :1610 |8      : 740 |
+|2:1970 |1:  12 |3      : 961 |2      : 588 |
+|3: 373 |     |2      : 445 |6      : 498 |
+|     |     |7      : 410 |5      : 470 |
+|     |     |4      : 395 |9      : 468 |
+|     |     |8      : 351 |3      : 459 |
+|     |     |(Other): 961 |(Other):1910 |
+
+: Summary statistics of categorical variables {#tbl-summary-cat}
+
+
+
+## Data Visualisations
+
+```{r}
+#| eval: true
+#| echo: false
+#| warning: false
+
+# Plot 1: Distribution of Total Health Expenditure (P606t)
+p1 <- ggplot(df, aes(x=log(P606t))) +
+      geom_histogram(bins=30, fill="blue", color="black") +
+      theme_minimal()
+
+# Plot 2: Distribution of Household Size (A049)
+p2 <- ggplot(df, aes(x=A049)) +
+      geom_histogram(bins=6, fill="green", color="black") +
+      theme_minimal()
+
+# Plot 3: Distribution of Weekly Household Income (p344p)
+p3 <- ggplot(df, aes(x=p344p)) +
+      geom_histogram(bins=30, fill="orange", color="black") +
+      theme_minimal()
+
+# Plot 4: Distribution of Anonymised Household Income (incanon)
+p4 <- ggplot(df, aes(x=incanon)) +
+      geom_histogram(bins=30, fill="red", color="black") +
+      theme_minimal()
+
+# Plot 5: Distribution of Age of Oldest Person in Household (a070p)
+p5 <- ggplot(df, aes(x=a070p)) +
+      geom_histogram(bins=30, fill="purple", color="black") +
+      theme_minimal()
+
+# Plot 6: Distribution of Rooms in Accommodation (a114p)
+p6 <- ggplot(df, aes(x=a114p)) +
+      geom_histogram(bins=10, fill="cyan", color="black") +
+      theme_minimal()
+
+# Plot 7: Sex of Oldest Person in Household (A071)
+p7 <- ggplot(df, aes(x=A071)) +
+      geom_bar(fill="yellow", color="black") +
+      theme_minimal()
+
+# Plot 8: Wealthy Household Indicator (p493p)
+p8 <- ggplot(df, aes(x=p493p)) +
+      geom_bar(fill="pink", color="black") +
+      theme_minimal()
+```
+
+Based on the summary statistics (@tbl-summary-num, @tbl-summary-cat) and the visualizations (@fig-p1p2, @fig-p3p4, @fig-p5p6, @fig-p7p8) created for each variable in dataset, here are some analyses and insights:
+
+```{r}
+#| eval: true
+#| echo: false
+#| message: false
+#| warning: false
+#| label: fig-p1p2
+#| layout-ncol: 1
+#| fig-cap: "Distribution of Total Health Expenditure and Household Size"
+#| fig-subcap: ["Distribution of Total Health Expenditure log(P606t)", "Distribution of Household Size (A049)"]
+
+# Print the plots
+p1
+p2
+```
+
+1.  Total Health Expenditure (P606t):
+    -   To make the pictures more meaningful, I use log transformation. The distribution is highly skewed, with most values clustered near zero. This suggests that a majority of households have low health expenditure, but there are a few households with very high health costs.
+    -   Possible factors influencing this could be differences in health needs, insurance coverage, or access to healthcare services.
+2.  Household Size (A049):
+    -   Most households consist of 1 to 4 members.
+    -   Larger households might have different dynamics in terms of health expenditure, potentially due to more diverse health needs or economies of scale.
+
+```{r}
+#| eval: true
+#| echo: false
+#| message: false
+#| warning: false
+#| label: fig-p3p4
+#| layout-ncol: 1
+#| fig-cap: "Distribution of Weekly Household Income and Anonymised Household Income"
+#| fig-subcap: ["Distribution of Weekly Household Income (p344p)", "Distribution of Anonymised Household Income (incanon)"]
+
+p3
+p4
+```
+
+3.  Weekly Household Income (p344p) and Anonymised Household Income (incanon):
+    -   Both income distributions are right-skewed, indicating that most households have lower incomes with a smaller proportion having substantially higher incomes.
+    -   There could be a correlation between income levels and health expenditure, possibly due to better access to healthcare or ability to afford more services in higher-income households.
+
+```{r}
+#| eval: true
+#| echo: false
+#| message: false
+#| warning: false
+#| label: fig-p5p6
+#| layout-ncol: 1
+#| fig-cap: "Distribution of Age of Oldest Person in Household and Rooms in Accommodation"
+#| fig-subcap: ["Distribution of Age of Oldest Person in Household (a070p)", Distribution of Rooms in Accommodation (a114p)]
+
+p5
+p6
+```
+
+4.  Age of Oldest Person in Household (a070p):
+    -   The distribution is somewhat uniform but slightly skewed towards older ages.
+    -   Older age groups might have higher health expenditures due to age-related health issues.
+5.  Rooms in Accommodation (a114p):
+    -   Most households have 5 to 7 rooms, which might correlate with household size and indirectly affect health expenditure.
+
+```{r}
+#| eval: true
+#| echo: false
+#| message: false
+#| warning: false
+#| label: fig-p7p8
+#| layout-ncol: 1
+#| fig-cap: "Distribution of Sex of Oldest Person in Household and Wealthy Household Indicator"
+#| fig-subcap: ["Distribution of Sex of Oldest Person in Household (A071)", "Distribution of Wealthy Household Indicator (p493p)"]
+
+p7
+p8
+```
+
+6.  Sex of Oldest Person in Household (A071):
+    -   The gender distribution shows a predominance of either all male or all female as the oldest person in the household.
+    -   This demographic factor could be explored to see if there's a gender-related pattern in health expenditure.
+7.  Wealthy Household Indicator (p493p):
+    -   Most households are not classified as wealthy.
+    -   The distinction between wealthy and non-wealthy households could be significant in terms of healthcare spending, with wealthier households potentially having higher expenditure.
+8.  Categorical Variables (A071, A094, Gorx):
+    -   The distribution of categorical variables like the sex of the oldest person, NS-SEC class, and government office region might offer insights when cross-examined with health expenditure. For instance, regional differences could indicate varying healthcare costs or access across regions.
+
+
+```{r}
+#| eval: true
+#| echo: false
+#| message: false
+#| warning: false
+#| label: fig-corr
+#| fig-cap: "Correlation between numerical variables"
+
+
+corrplot(cor(df[, -c(3, 6, 9, 10)]), method = "number")
+```
+
+From the correlation plot (@fig-corr) of the numeric variables in dataset, we can draw several conclusions:
+
+1.  Health Expenditure (P606t):
+    -   There doesn't appear to be a strong correlation between health expenditure and other variables in the dataset. This suggests that health expenditure in this dataset is not strongly predictable by the other measured factors like household size, income, age of the oldest person, or number of rooms in the accommodation.
+    -   However, correlation does not imply causation, and there might be other unmeasured variables or non-linear relationships that affect health expenditure.
+2.  Household Size (A049) and Rooms in Accommodation (a114p):
+    -   There is a moderate positive correlation between household size and the number of rooms in the accommodation. This is intuitive as larger households typically require more rooms.
+3.  Income Variables (p344p and incanon):
+    -   There is a very strong correlation between the two income variables (p344p and incanon), indicating that they are likely measuring the same underlying attribute (household income) in slightly different ways.
+4.  Age of the Oldest Person (a070p):
+    -   The age of the oldest person in the household does not show a strong correlation with other variables. This suggests that the age factor, at least in isolation, is not a strong determinant of factors like income or health expenditure in this dataset.
+
+# Regression Models and Results
+
+## Model 1
+
+The regression model built using log-transformed health expenditure (P606t) as the target variable and household size (A049), sex of the oldest person in the household (A071), and age of the oldest person in the household (a070p) as predictors provides the following insights (@tbl-mod12):
+
+```{r}
+#| echo: false
+#| eval: true
+
+df$log_P606t <- log(df$P606t + 1e-4)
+mod1 <- lm(log_P606t~A049+A071+a070p, df)
+
+```
+
+1.  Model Fit:
+    -   R-squared: 0.037. This indicates that about 3.7% of the variability in the log-transformed health expenditure is explained by the model. It's a relatively low value, suggesting that these predictors alone do not strongly explain the variation in health expenditure.
+2.  Coefficients:
+    -   A049 (Household Size): Coefficient = 0.7802, p-value \< 0.001. This suggests a significant positive relationship between household size and health expenditure. Larger households tend to have higher health expenditures.
+    -   a070p (Age of Oldest Person): Coefficient = 0.0406, p-value \< 0.001. There's a significant positive relationship between the age of the oldest person in the household and health expenditure. Older age is associated with higher health expenditures.
+    -   A071 (Sex of Oldest Person):
+        -   A0712 (All Female): Coefficient = -0.2852, p-value = 0.068. This coefficient is not statistically significant at the 5% level, suggesting that having an all-female oldest person does not significantly differ in health expenditure compared to the base category (all-male).
+        -   A0713 (Mixed Sex): Coefficient = 0.9097, p-value = 0.002. This is significant, indicating that households with a mixed-sex oldest person have higher health expenditures compared to households with an all-male oldest person.
+
+## Model 2
+
+The second regression model, which includes both demographic and economic/income data (since the correlation coefficient between incanon and p344p is 1, in order to avoiding multicollinearity problem, I only use incanon predictor), yields the following results (@tbl-mod12):
+
+```{r}
+#| eval: true
+#| echo: false
+#| warning: false
+#| tbl-cap: "Linear regression model summary of the first model and second model"
+#| label: tbl-mod12
+
+mod2 <- lm(log_P606t~A049+A071+a070p+incanon+p493p, df)
+
+modelsummary::modelsummary(
+  list(
+    "Model 1" = mod1,
+    "Model 2" = mod2
+  ),
+  fmt = 4
+)
+```
+
+1.  Household Size (A049):
+    -   Coefficient: 0.5237
+    -   This suggests that an increase in household size is associated with an increase in health expenditure, which aligns with the expectation that larger households might have higher health-related costs.
+2.  Age of Oldest Person (a070p):
+    -   Coefficient: 0.0444
+    -   Indicates that as the age of the oldest person in the household increases, there's a slight increase in health expenditure.
+3.  Sex of the Oldest Person (A071) Categories:
+    -   A071_2 (All Female): Coefficient of -0.0721, not statistically significant (p-value: 0.643).
+    -   A071_3 (Mixed Sex): Coefficient of 0.6371, suggesting households with mixed sex as the oldest person are associated with higher health expenditure compared to the baseline (all male), and this effect is statistically significant (p-value: 0.027).
+4.  Anonymised Household Income (incanon):
+    -   Coefficient: 0.0018
+    -   Indicates a positive association between household income and health expenditure, which might reflect the ability of higher-income households to spend more on health.
+5.  Wealthy Household Indicator (p493p1):
+    -   Coefficient: -2.3896
+    -   This negative coefficient suggests that households classified as wealthy have lower health expenditure, but this result is not statistically significant (p-value: 0.116).
+6.  Overall Model Performance:
+    -   The R-squared value is 0.059, indicating that the model explains approximately 5.9% of the variability in the log-transformed health expenditure. While this is an improvement over the first model, it still leaves a large portion of the variance unexplained, suggesting that other unmeasured factors might be influencing health expenditure.
+
+## Model 3
+
+The third regression model, which includes demographic information, economic and income data, housing characteristics, occupational and employment data, and geographic information, provides the following insights (@tbl-mod34):
+
+```{r}
+#| eval: true
+#| echo: false
+mod3 <- lm(log_P606t~A049+A071+a070p+incanon+p493p+a114p+A094+Gorx, df)
+```
+
+1.  Household Size (A049):
+    -   Coefficient: 0.5041
+    -   Suggests a positive association between household size and health expenditure, indicating larger households tend to have higher health expenditures.
+2.  Age of Oldest Person (a070p):
+    -   Coefficient: 0.0327
+    -   Indicates a slight increase in health expenditure with the age of the oldest person in the household.
+3.  Sex of the Oldest Person (A071) Categories:
+    -   A071_2 (All Female): Coefficient of -0.0598, not statistically significant.
+    -   A071_3 (Mixed Sex): Coefficient of 0.5931, suggesting a slightly higher health expenditure in households with mixed sex compared to all male households.
+4.  Anonymised Household Income (incanon):
+    -   Coefficient: 0.0014
+    -   Reflects a positive correlation between household income and health expenditure.
+5.  Wealthy Household Indicator (p493p_1):
+    -   Coefficient: -1.8057
+    -   Indicates a potential negative association between being classified as wealthy and health expenditure, though not statistically significant.
+6.  Rooms in Accommodation (a114p):
+    -   Coefficient: 0.1899
+    -   Suggests that a higher number of rooms in accommodation is associated with increased health expenditure.
+7.  Occupational and Employment Data (A094) and Geographic Information (Gorx):
+    -   Various coefficients for different occupational classes and regions, some of which are statistically significant.
+    -   These coefficients suggest varying health expenditures based on the occupational class of the household reference person and the household's region.
+8.  Model Performance:
+    -   R-squared: 0.077, indicating that about 7.7% of the variability in log-transformed health expenditure is explained by the model. This is an improvement over the previous models but still leaves a substantial amount of variance unexplained.
+    -   The presence of some non-significant predictors suggests the potential for model refinement.
+
+## Model 4
+
+Based on the analyses of the three regression models and considering the significance of coefficients, the distribution of variables, and potential multicollinearity issues, I recommend the following predictors for final model:
+
+
+-   Household Size (A049): This variable consistently showed a significant positive relationship with health expenditure.
+-   Age of the Oldest Person in the Household (a070p): Age could be a relevant factor, especially if older individuals have different health needs.
+-   Anonymised Household Income (incanon): Income is a crucial factor in health expenditure, as it can influence access to healthcare services and the ability to afford healthcare.
+-   Rooms in Accommodation (a114p): The number of rooms was significant in the previous model and might reflect the household's overall economic status or lifestyle, which could impact health expenditure.
+-   NS - SEC 8 Class of Household Reference Person (A094): Some occupational classes showed significant coefficients in the previous models, consider including them.
+-   Government Office Region Modified (Gorx): There are regions demonstrated a significant impact on health expenditure, they might be worth including.
+
+```{r}
+#| eval: true
+#| echo: false
+#| warning: false
+#| tbl-cap: "Linear regression model summary of the third model and fourth model"
+#| label: tbl-mod34
+
+
+mod4 <- lm(log_P606t~A049+a070p+incanon+a114p+A094+Gorx, df)
+
+modelsummary::modelsummary(
+  list(
+    "Model 3" = mod3,
+    "Model 4" = mod4
+  ),
+  fmt = 4,
+  coef_omit = -(1:15)
+)
+```
+
+The model coefficients and summary (I only show the first 15 coefficients in @tbl-mod34) are: 
+
+1.  Household Size (A049):
+
+    -   Coefficient: 0.5201
+    -   Indicates that larger households are associated with higher health expenditures.
+
+2.  Age of Oldest Person (a070p):
+
+    -   Coefficient: 0.0323
+    -   Suggests a slight increase in health expenditure with the increasing age of the oldest person in the household.
+
+3.  Anonymised Household Income (incanon):
+
+    -   Coefficient: 0.0015
+    -   Reflects a positive association between household income and health expenditure.
+
+4.  Rooms in Accommodation (a114p):
+
+    -   Coefficient: 0.1920
+    -   Indicates that more rooms in accommodation are associated with increased health expenditure.
+
+5. Occupational Class of Household Reference Person (A094) and Geographic Information (Gorx):
+
+    -   Various coefficients for different occupational classes and regions are included. Some of these coefficients are statistically significant, suggesting that occupation and region can influence health expenditure.
+    -   For example, the negative and significant coefficient for A0949 (Never worked and long term unemployed) suggests lower health expenditure for this group.
+
+6. Model Performance:
+
+    -   R-squared: 0.075, which means the model explains approximately 7.5% of the variability in log-transformed health expenditure.
+
+
+
+# Conclusion and Discussion
+
+The analysis of the Living Costs and Food Survey UK Data Archive aimed to understand the factors influencing total health expenditure in households. Using linear regression models, we explored various demographic, economic, income, housing, occupational, and geographical predictors. The final model incorporated key variables such as household size, age of the oldest person, household income, number of rooms, occupational class, and region.
+
+Key findings include a positive association between household size and health expenditure, suggesting that larger households tend to incur higher health costs. This could be due to more diverse health needs or simply more individuals requiring healthcare. The age of the oldest person in the household also showed a positive relationship with health expenditure, reflecting potentially higher healthcare needs in older age. Household income was another significant predictor, underscoring the impact of economic status on healthcare affordability and access.
+
+The number of rooms in accommodation, a proxy for socioeconomic status, was positively related to health expenditure, possibly indicating that more affluent households have greater healthcare spending. Occupational class and geographic variables showed varying impacts, suggesting that socio-economic and regional factors influence health expenditure, though these relationships were not always straightforward or statistically significant.
+
+The model diagnostics revealed some concerns. The presence of heteroskedasticity and potential multicollinearity issues, along with the Ramsey's RESET test results, suggest that the linear model might not fully capture the complexity of the relationships. Additionally, the residuals vs fitted values plot indicated potential non-linearity and the presence of outliers.
+
+In conclusion, while the regression models provided valuable insights into factors affecting health expenditure, they also highlighted the complexity of predicting healthcare costs. The modest R-squared values suggest that other unmeasured factors might play a significant role. Future research could explore more sophisticated models, including non-linear relationships and interaction effects, to better understand the dynamics of health expenditure. Addressing potential outliers and ensuring model assumptions are met would further enhance the robustness of the findings.
+
+\newpage
+
+\appendix
+
+# Appendix {.unnumbered}
+
+## Model Diagnostics
+
+The analysis of the final regression model using various diagnostic tests provides the following insights.
+
+```{r}
+#| eval: true
+#| echo: false
+#| tbl-cap: "Variance-inflation factors of model"
+#| label: tbl-vif
+
+kable(vif(mod4), "simple")
+```
+
+The VIF values (@tbl-vif) for most predictors are below 10, suggesting that multicollinearity is not a severe concern for these variables.
+
+```{r}
+#| eval: true
+#| echo: false
+#| message: false
+#| warning: false
+#| label: fig-res
+#| fig-cap: "The scatterplot between model residuals and fitted values"
+
+
+plot(mod4, 1)
+```
+
+The Residuals vs Fitted Values Plot (@fig-res) would typically show whether the residuals have non-linear patterns. Ideally, the residuals should be randomly scattered around zero without any apparent pattern. In this plot, while there is some randomness in the spread of residuals, there appears to be a slight pattern, particularly with residuals not being evenly distributed across different ranges of fitted values. This suggests the presence of non-linearity in the relationship between predictors and the response variable. The plot shows some signs of non-constant variance (heteroscedasticity), as indicated by the spread of residuals that seems to vary across the range of fitted values.
+
+```{r}
+#| eval: true
+#| echo: false
+#| tbl-cap: "Ramsey's RESET test for model"
+#| label: tbl-reset
+
+kable(tidy(resettest(mod4)), "simple")
+```
+
+The RESET test (@tbl-reset) has a low p-value (0.0001057), suggesting that the model may suffer from specification issues. This means the current model might not adequately capture the relationship between predictors and the target variable.
+
+```{r}
+#| eval: true
+#| echo: false
+#| tbl-cap: "Breusch-Pagan test against heteroskedasticity for model"
+#| label: tbl-bp
+#| message: false
+
+kable(tidy(bptest(mod4)), "simple")
+```
+
+The Breusch-Pagan test (@tbl-bp) indicates the presence of heteroskedasticity (p-value \< 0.0001). This suggests that the variance of residuals is not constant, which can affect the reliability of standard errors and thus the inference drawn from coefficient estimates.
+
+```{r}
+#| eval: true
+#| echo: false
+#| message: false
+#| warning: false
+#| label: fig-qqnorm
+#| fig-cap: "Normal QQ plot of the model residuals"
+
+
+qqnorm(mod4$residuals)
+qqline(mod4$residuals)
+```
+
+The QQ plot (@fig-qqnorm) shows some deviation from the line, particularly in the tails, suggesting that the residuals may not be perfectly normally distributed. While some deviation is common in real-world data, extreme deviations might affect the validity of some assumptions of the linear regression model.
+
+
+\newpage
+
+# References
